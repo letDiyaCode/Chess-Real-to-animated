@@ -1,6 +1,11 @@
 # Ignore data backups
 data/raw/
 data/processed/
+# Derived cell crops (regenerable via preprocessing/extract_cells.py)
+data/cells/
+# Generated videos and dataset (regenerable)
+data/videos/
+data/dataset/
 
 # Ignore Python cache
 __pycache__/
@@ -8,6 +13,8 @@ __pycache__/
 
 # Ignore virtual environment
 chessenv/
+.venv/
+venv/
 .env/
 *.env
 
