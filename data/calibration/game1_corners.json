@@ -1,0 +1,32 @@
+{
+  "game": "game1",
+  "reference_frame": "IMG_1333.HEIC",
+  "image_size": [
+    3024,
+    4032
+  ],
+  "corner_order": [
+    "top-left",
+    "top-right",
+    "bottom-right",
+    "bottom-left"
+  ],
+  "corners": [
+    [
+      604.8,
+      1218.56
+    ],
+    [
+      2741.76,
+      1209.6
+    ],
+    [
+      2755.2,
+      3418.24
+    ],
+    [
+      528.64,
+      3346.56
+    ]
+  ]
+}

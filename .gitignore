@@ -24,3 +24,12 @@ venv/
 # Ignore system files
 .DS_Store
 Thumbs.db
+
+# YOLO / detection training artifacts (large, regenerable)
+data/roboflow_yolov8/
+*.zip
+*.pt
+runs/
+
+# JPG frames prepared for annotation (large, regenerable from data/gameplay)
+data/annotate/

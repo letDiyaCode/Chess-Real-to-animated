@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chess Real-to-Animated — Replay</title>
+<style>
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif;
+         background:#1e1f22; color:#e6e6e6; }
+  header { padding:12px 18px; font-size:18px; font-weight:600;
+           background:#2b2d31; border-bottom:1px solid #000; }
+  .wrap { display:flex; gap:18px; padding:18px; align-items:flex-start;
+          flex-wrap:wrap; }
+  .panel { background:#2b2d31; border-radius:10px; padding:14px; }
+  video { width:460px; max-width:46vw; border-radius:8px; background:#000; display:block; }
+  .board { width:460px; height:460px; display:grid;
+           grid-template-columns:repeat(8,1fr); grid-template-rows:repeat(8,1fr);
+           border-radius:8px; overflow:hidden; }
+  .sq { display:flex; align-items:center; justify-content:center;
+        font-size:46px; line-height:1; user-select:none; }
+  .light { background:#f0d9b5; } .dark { background:#b58863; }
+  .sq.wp { color:#ffffff; -webkit-text-stroke:1.6px #2b2b2b; text-shadow:0 1px 1px rgba(0,0,0,.35); }
+  .sq.bp { color:#141414; -webkit-text-stroke:1.6px #f0f0f0; text-shadow:0 1px 1px rgba(255,255,255,.25); }
+  .sq.hl { box-shadow: inset 0 0 0 4px rgba(255,235,59,0.8); }
+  .side { min-width:230px; }
+  .score { font-size:15px; margin:6px 0 12px; }
+  .bar { height:14px; background:#444; border-radius:7px; overflow:hidden; }
+  .bar > div { height:100%; background:#e6e6e6; width:50%; transition:width .2s; }
+  .moves { max-height:430px; overflow:auto; font-size:14px; line-height:1.7;
+           font-variant-numeric:tabular-nums; }
+  .moves span { cursor:pointer; padding:1px 4px; border-radius:4px; }
+  .moves span.cur { background:#5865f2; color:#fff; }
+  .controls { margin-top:10px; font-size:13px; color:#aaa; }
+  .status { margin-top:6px; font-size:13px; color:#9ad; }
+</style>
+</head>
+<body>
+<header>♟️ Chess Real-to-Animated — real video (left) vs detected game (right)</header>
+<div class="wrap">
+  <div class="panel">
+    <video id="vid" src="" controls autoplay muted></video>
+    <div class="controls">Play the video — the board follows automatically.</div>
+  </div>
+  <div class="panel">
+    <div id="board" class="board"></div>
+    <div class="status" id="status"></div>
+  </div>
+  <div class="panel side">
+    <div class="score">Material: <span id="scoreTxt">even</span>
+      <div class="bar"><div id="scoreBar"></div></div>
+    </div>
+    <div class="moves" id="moves"></div>
+  </div>
+</div>
+<script>
+const DATA = {"fens": ["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "nbq1kbnr/p1pppppp/8/8/8/8/1PPPPPPP/NBK1QBNR w - - 0 1", "nbq1kbnr/1ppppppp/8/8/8/8/1PPPPPPP/NBQ1KBNR w - - 0 1", "nbq1kbnr/p1pppppp/8/8/4P3/8/1PPP1PPP/NBQ1KBNR w - - 0 1", "nbq1kbnr/p1pppp1p/6p1/8/4P3/8/1PPP1PPP/NBQ1KBNR w - - 0 1", "nbq1kbnr/p1pppp1p/6p1/8/4P3/1N6/1PPP1PPP/1BQ1KBNR w - - 0 1", "nbq1kb1r/1ppppp1p/6pn/8/4P3/1N6/PPPP1PPP/1BQ1KBNR w - - 0 1", "nbq1kb1r/p1pppp1p/6pn/8/4P3/1N5N/1PPP1PPP/1BQ1KB1R w - - 0 1", "nbq1b2r/p1pppp1p/6p1/8/4P1n1/1N5N/1PPP1PPP/1BQ1KB1R w - - 0 1", "nbq1kb1r/p1pppp1p/6p1/8/4P1Q1/1N5N/1PPP1PPP/1B2KB1R w - - 0 1", "nbq1kb1r/2pppp1p/p5p1/8/4P1Q1/1N5N/1PPP1PPP/1B2KB1R w - - 0 1", "nbq1kb1r/2pppp1p/p5p1/8/4P3/1N3Q1N/1PPP1PPP/1B2KB1R w - - 0 1", "nbq1kb1r/3ppp1p/p1p3p1/8/4P3/1N3Q1N/1PPP1PPP/1B2KBR1 w - - 0 1", "nbq1kb1r/2p1pp1p/p1p3p1/8/4P3/1N3Q1N/1PPP1PPP/1B2KB1R w - - 0 1", "nbq1kb1r/2p1pp1p/p1p3p1/8/1B2P3/1N3Q1N/1PPP1PPP/1B2K2R w - - 0 1", "nbq1k2r/3ppp1p/p1p3pb/8/1B2P3/1N3Q1N/1PPP1PPP/1B2K2R w - - 0 1", "nbq1k2r/2p1pQ1p/p1p3pb/8/1B2P3/1N5N/1PPP1PPP/1B2K2R w - - 0 1", "nbq1k2r/3pp2p/p1p3pb/8/1B2P3/1N3Q1N/1PP2PPP/1B2K2R w - - 0 1", "nbq1k2r/3p3p/p1p3pb/4p3/1B2P3/1N3Q1N/1PPP1PPP/1B2K2R w - - 0 1", "nbq1k2r/3p3p/p1p3pb/4p3/1B2P3/1N1P1Q1N/1PP2PPP/1B2K2R w - - 0 1", "1bq1k2r/3p3p/p1p3pb/4p3/1B2P3/1N1P1Q1N/1PP2PPP/1B2K2R w - - 0 1", "1bq1k2r/3p3p/p1p3pB/4p3/1B2P3/1N1P1Q1N/1PP2PPP/4K2R w - - 0 1", "1bq1k2r/3p3p/p1p3pB/1n2p3/1B2P3/1N1P1Q1N/1PP2PPP/4K2R w - - 0 1", "1bq1k2r/3p3p/p1p3pB/1n2p3/1B2P3/1PNP1Q1N/2P2PPP/4K2R w - - 0 1", "1bq1k2r/3p3p/p1p3pB/2n1p3/1B2P3/1PNP1Q1N/P1P2PPP/4K2R w - - 0 1", "1bq1k2r/3p3p/p1p3pB/4p3/1B2P3/n1NP1Q1N/2P2PPP/4K2R w - - 0 1", "1bq1k2r/2p4p/p1p3pB/4p3/1B2P3/n1NP1Q1N/2P2PPP/R3K2R w - - 0 1", "1b2k2r/2p4p/p1p3pB/4p3/1B2P2q/n1NP1Q1N/2P2PPP/R3K2R w - - 0 1", "1b2k2r/2p4p/p1p3pB/4p3/1B2P2q/n1NP1Q1N/2P2PPP/R4RK1 w - - 0 1", "1b2k2r/2p4p/p1p3pq/4p3/1B2P3/n1NP1Q1N/2P2PPP/R4RK1 w - - 0 1", "1b2k2r/2p4p/p1p3pq/4p3/1B2P3/R1NP1Q1N/2P2PPP/5RK1 w - - 0 1", "1b2k1r1/2p4p/p1p3pq/4p3/1B2P3/R1NP1Q1N/2P2PPP/5RK1 w - - 0 1", "1b2k1r1/3p3p/p1p3pq/4p3/1B2P3/R1NP1QPN/2P2P1P/5RK1 w - - 0 1", "1b2k1r1/2p4p/p1p3p1/4p3/1B2P3/R1NP1QPq/2P2P1P/5RK1 w - - 0 1", "1b2k1B1/2p4p/p1p3p1/4p3/4P3/R1NP1QPq/2P2P1P/5RK1 w - - 0 1", "1b2k1B1/2p5/p1p3pp/4p3/4P3/R1NP1QPq/2P2P1P/5RK1 w - - 0 1", "1b2k1B1/2p5/p1p3pp/4p3/4P3/R1NP1QPq/P1P2P1P/4R1K1 w - - 0 1", "1b2k1B1/3p4/p1p3p1/4p2p/4P3/R1NP1QPq/2P2P1P/4R1K1 w - - 0 1", "1b2k1B1/2p5/p1p3p1/3Np2p/4P3/R2P1QPq/2P2P1P/4R1K1 w - - 0 1", "1b2k1B1/2p5/p5p1/3pp2p/4P3/R2P1QPq/2P2P1P/4R1K1 w - - 0 1", "1b2k1B1/2p5/p5p1/3Pp2p/8/R2P1QPq/2P2P1P/4R1K1 w - - 0 1", "1b2k1B1/2p5/p7/3Pp1pp/8/R2P1QPq/2P2P1P/4R1K1 w - - 0 1", "1b2k1B1/2p5/p7/3PR1pp/8/R2P1QPq/2P2P1P/6K1 w - - 0 1", "1bk3B1/2p5/p7/3PR1pp/8/R2P1QPq/2P2P1P/6K1 w - - 0 1", "1bk3B1/3p4/p2P4/4R1pp/8/R2P1QPq/2P2P1P/6K1 w - - 0 1", "1bk3B1/3p4/p2P4/4R2p/6p1/R2P1QPq/2P2P1P/6K1 w - - 0 1", "2k3B1/3p4/p2P4/4R2p/6p1/R2P2Pq/2P2P1P/6K1 w - - 0 1", "1bk3B1/3p4/3P4/p3R2p/6p1/R2P2Pq/2P2P1P/6K1 w - - 0 1", "1bk3B1/3p4/3P4/R3R2p/6p1/3P2Pq/2P2P1P/6K1 w - - 0 1", "1bk3B1/3p4/3P4/R3R2p/6p1/3P2Pq/2P2P1P/6K1 w - - 0 1", "1bk3B1/3p4/3P4/R3R2p/6p1/3P2Pq/2P2P1P/6K1 w - - 0 1", "1bk3B1/3p4/3P4/p3R2p/6p1/3P2Pq/2P2P1P/6K1 w - - 0 1", "1bk3B1/3p4/3P4/p3R2p/3P2p1/6Pq/2P2P1P/6K1 w - - 0 1", "1bk3B1/3p4/3P4/4R2p/p2P2p1/6Pq/2P2P1P/6K1 w - - 0 1", "1bk3B1/3p4/3P4/7R/p2P2p1/6Pq/2P2P1P/6K1 w - - 0 1", "1bk3B1/3p4/3P4/7q/p2P2p1/6P1/2P2P1P/6K1 w - - 0 1", "1bk3B1/3p4/3P4/7q/p2P1Pp1/6P1/2P4P/6K1 w - - 0 1", "1bk3B1/3p4/3P4/7q/3P1Pp1/6P1/2P4P/6K1 w - - 0 1", "1bk3B1/3p4/3P4/5P1q/3P2p1/6P1/2P4P/6K1 w - - 0 1", "1bk3B1/3p4/3P4/5P1q/3P2p1/6P1/2P4P/6K1 w - - 0 1", "1bk3B1/3p4/3P1P2/7q/3P2p1/6P1/2P4P/6K1 w - - 0 1", "1bk3Bq/3p4/3P1P2/8/3P2p1/6P1/2P4P/6K1 w - - 0 1", "1bk3Bq/3p4/3P1P2/8/3P2pP/6P1/2P5/6K1 w - - 0 1", "1bk3q1/3p4/3P1P2/8/3P2pP/6P1/2P5/6K1 w - - 0 1", "1bk3q1/3p4/3P1P2/7P/3P2p1/6P1/2P5/6K1 w - - 0 1", "1bk1q3/3p4/3P1P2/7P/3P2p1/6P1/2P5/6K1 w - - 0 1", "1bk1q3/3p4/3P1P1P/8/3P2p1/6P1/2P5/6K1 w - - 0 1", "1bk5/3p4/3P1q1P/8/3P2p1/6P1/2P5/6K1 w - - 0 1", "1bk5/3p3P/3P1q2/8/3P2p1/6P1/2P5/6K1 w - - 0 1", "1bk1q3/3p3P/3P4/8/3P2p1/6P1/2P5/6K1 w - - 0 1", "1bk1q3/3p3P/3P4/8/3P2p1/6P1/2P5/6K1 w - - 0 1", "2k1q3/b2p3P/3P4/8/3P2p1/6P1/2P5/6K1 w - - 0 1", "2k1q3/b2p3P/3P4/8/2PP2p1/6P1/8/6K1 w - - 0 1", "2k2q2/3p3P/3P4/8/2PP2p1/5bP1/8/6K1 w - - 0 1", "2k1q3/3p3P/3P4/8/2PP2p1/5bP1/7Q/6K1 w - - 0 1", "2k5/2p4P/2q5/8/2PP2p1/5bP1/7Q/6K1 w - - 0 1", "2k4R/2p5/2q5/8/2PP2p1/5bP1/7Q/6K1 w - - 0 1", "7R/1k1p4/2q5/8/2PP2p1/5bP1/7Q/6K1 w - - 0 1", "7R/1k1p4/2q5/2P5/3P2p1/5bP1/7Q/6K1 w - - 0 1", "7R/1k1p4/4q3/2P5/3P2p1/5bP1/7Q/6K1 w - - 0 1", "8/1k1p4/4q2R/2P5/3P2p1/5bP1/7Q/6K1 w - - 0 1", "8/1k1p4/7R/2P5/2q3p1/5bP1/7Q/6K1 w - - 0 1", "8/1k1p4/7R/2P5/2b3p1/5bP1/5Q2/6K1 w - - 0 1", "8/1k1p4/5q1R/2P5/6p1/5bP1/5Q2/6K1 w - - 0 1", "8/1k1p4/5R2/2P5/6p1/5bP1/5Q2/6K1 w - - 0 1", "8/1k6/5R2/2Pp4/6p1/5bP1/5Q2/6K1 w - - 0 1", "8/1k6/5R2/2Pp4/6p1/5bP1/Q7/6K1 w - - 0 1", "8/1k6/5R2/2Pp4/6p1/6P1/Q7/3b2K1 w - - 0 1", "8/1k6/Q4R2/2Pp4/6p1/6P1/8/3b2K1 w - - 0 1", "8/2k5/Q4R2/2Pp4/6p1/6P1/8/3b2K1 w - - 0 1", "8/2k5/Q6R/2Pp4/6p1/6P1/8/3b2K1 w - - 0 1", "8/2k5/Q6R/2P5/3p2p1/6P1/8/3b2K1 w - - 0 1", "8/2k4R/Q7/2P5/3p2p1/6P1/8/3b2K1 w - - 0 1", "2k5/7R/Q7/2P5/3p2p1/6P1/8/3b2K1 w - - 0 1", "4k3/7R/Q7/2P5/3p2p1/6P1/8/3b2K1 w - - 0 1", "Q3k3/7R/8/2P5/3p2p1/6P1/8/3b2K1 w - - 0 1", "nbq1kbnr/1pppp1pp/8/5p2/8/8/PPPPPPPP/N1BK1BNR w - - 0 1", "nbq1kbnr/1pppp1pp/8/5p2/7P/8/PPPPPPP1/N1BK1BNR w - - 0 1"], "san": ["", "", "", "", "", "", "Nb3", "", "", "", "", "", "Qf3", "", "", "", "", "", "", "", "d3", "", "", "", "", "", "", "", "", "", "", "Rxa3", "", "", "", "", "", "", "", "", "", "exd5", "", "Rxe5+", "", "", "", "", "", "Raxa5", "", "", "", "d4", "", "Rxh5", "", "f4", "", "f5", "", "f6", "", "h4", "", "h5", "", "h6", "", "h7", "", "", "", "c4", "", "", "", "h8=R+", "", "c5", "", "Rh6", "", "", "", "Rxf6", "", "Qa2", "", "Qa6+", "", "Rh6", "", "Rh7+", "", "", "Qa8#", "", "h4"], "hold": 1.0, "video": "../data/videos/game1_clean_h264.mp4", "game": "game1"};
+// Use the solid glyph shapes for BOTH colors; distinguish white/black via CSS.
+const GLYPH = {p:'\u265F',n:'\u265E',b:'\u265D',r:'\u265C',q:'\u265B',k:'\u265A',
+               P:'\u265F',N:'\u265E',B:'\u265D',R:'\u265C',Q:'\u265B',K:'\u265A'};
+const VAL = {p:1,n:3,b:3,r:5,q:9,k:0};
+
+document.getElementById('vid').src = DATA.video;
+
+function parseFEN(fen){
+  const rows = fen.split(' ')[0].split('/');
+  const g = [];
+  for(const row of rows){
+    const r=[];
+    for(const ch of row){
+      if(/\d/.test(ch)){ for(let i=0;i<+ch;i++) r.push(''); }
+      else r.push(ch);
+    }
+    g.push(r);
+  }
+  return g; // g[0] = rank8 (top)
+}
+
+const boardEl = document.getElementById('board');
+const cells = [];
+for(let i=0;i<64;i++){
+  const d=document.createElement('div');
+  const r=Math.floor(i/8), c=i%8;
+  d.className='sq '+((r+c)%2===0?'light':'dark');
+  boardEl.appendChild(d); cells.push(d);
+}
+
+function render(idx){
+  const fen = DATA.fens[idx];
+  const g = parseFEN(fen);
+  let mat=0;
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const piece=g[r][c];
+    const cell=cells[r*8+c];
+    cell.textContent = piece?GLYPH[piece]:'';
+    cell.classList.remove('hl','wp','bp');
+    if(piece){ cell.classList.add(piece===piece.toUpperCase()?'wp':'bp'); }
+    if(piece){ const v=VAL[piece.toLowerCase()]; mat += (piece===piece.toUpperCase()? v : -v); }
+  }
+  // score bar (white advantage -> bar wider)
+  const pct = Math.max(5, Math.min(95, 50 + mat*4));
+  document.getElementById('scoreBar').style.width = pct+'%';
+  document.getElementById('scoreTxt').textContent =
+     mat===0? 'even' : (mat>0? ('White +'+mat) : ('Black +'+(-mat)));
+  document.getElementById('status').textContent =
+     'Position '+(idx+1)+' / '+DATA.fens.length;
+  // highlight move in list
+  document.querySelectorAll('.moves span').forEach((s,i)=>{
+     s.classList.toggle('cur', i===idx);
+  });
+  const cur=document.querySelector('.moves span.cur');
+  if(cur) cur.scrollIntoView({block:'nearest'});
+}
+
+// build move list
+const movesEl=document.getElementById('moves');
+let html='';
+for(let i=1;i<DATA.fens.length;i++){
+  if(i%2===1) html += '<b>'+Math.ceil(i/2)+'.</b> ';
+  html += '<span data-idx="'+i+'">'+(DATA.san[i]||'?')+'</span> ';
+}
+movesEl.innerHTML=html;
+movesEl.querySelectorAll('span').forEach(s=>{
+  s.onclick=()=>{ const idx=+s.dataset.idx; document.getElementById('vid').currentTime=idx*DATA.hold+0.05; render(idx); };
+});
+
+const vid=document.getElementById('vid');
+function currentIndex(){ return Math.max(0, Math.min(DATA.fens.length-1, Math.floor(vid.currentTime/DATA.hold))); }
+vid.addEventListener('timeupdate', ()=>render(currentIndex()));
+render(0);
+</script>
+</body>
+</html>
