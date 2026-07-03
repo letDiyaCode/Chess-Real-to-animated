@@ -1,121 +1,206 @@
-♟️ Chess Real-to-Animated
+# ♟️ Chess Real-to-Animated
 
-A Computer Vision System that Detects Real-World Chess Moves and Recreates Them Digitally
+Turn a recording of a **real over-the-board chess game** into a **digital
+animated board** that plays alongside the video, with a live move indicator and
+material score.
 
-⚡ Quickstart Setup
-# 1️⃣ Clone the Repository
-git clone https://github.com/diya173/Chess-Real-to-animated.git
-cd Chess-Real-to-animated
+The system takes top-down photos/frames of a physical game, detects the pieces
+with a trained YOLOv8 model, reconstructs the board position for each frame, and
+renders a synced side-by-side view: **real video on the left, animated board on
+the right.**
 
-# 2️⃣ Create & Activate Conda Environment
-conda env create -f environment.yml
-conda activate chess_vision
+---
 
-# 3️⃣ (Optional) Run Labeling Scripts
-python data/labels/label_single_pieces.py
-python data/labels/label_game_moves.py
+## 1. What it does (pipeline overview)
 
+```
+photos ─▶ make video ─▶ calibrate board ─▶ dedupe + stabilize ─▶
+YOLO piece detection ─▶ board reconstruction ─▶ side-by-side web replay
+```
 
-That’s it! ✅
-You’re ready to preprocess images, train the piece classifier, and test move detection.
+| Stage | Script | What it does |
+|-------|--------|--------------|
+| Video | `preprocessing/make_video.py` | Stitches the still frames into a game video |
+| Calibrate | `preprocessing/calibrate_board.py` | You click the 4 board corners once per game (fixed camera) |
+| Dedupe | `preprocessing/dedupe_frames.py` | Drops near-duplicate frames, ORB-stabilizes drift, builds a clean video |
+| Detect + reconstruct | `inference/reconstruct_game_yolo.py` | Runs YOLO on each frame and reads the board position (FEN) |
+| Train | `detection/train_detector.py` | Trains the YOLOv8 piece detector on the annotated dataset |
+| Replay UI | `web/build_replay.py` | Generates a self-contained HTML page: video + animated board + score |
 
-📘 Overview
+Helper/debug tools:
+- `inference/show_detection.py` — draw the detector's boxes on one frame.
+- `inference/detect_pieces.py` — print one frame's board as ASCII.
+- `preprocessing/heic_to_jpg_games.py` — convert HEIC frames to JPG for annotation.
 
-This project aims to bridge real chess play and digital animation.
-Using a top-down camera view, we capture real chessboard states, detect piece movements, and replicate them on a virtual/animated chessboard in real time.
+---
 
-It combines computer vision, deep learning, and chess logic to automate move recognition and visualization.
+## 2. How it works (the approach)
 
-🧠 Project Pipeline
-1️⃣ Data Collection
+**Fixed-camera calibration.** The camera stays put during a game, so the board's
+4 corners are marked once and reused to flatten (perspective-warp) every frame.
 
-Images captured using a fixed top-view camera setup.
+**Frame alignment + deduplication.** Small camera drift between shots is corrected
+with ORB feature registration, and frames where nothing changed are dropped, so
+we keep one clean, stabilized frame per distinct position.
 
-~400 images collected:
+**YOLOv8 piece detection.** A YOLOv8 model (trained on a Roboflow-annotated
+dataset of the pieces) detects each piece and its class. Because the pieces are
+tall 3-D objects seen at an angle, each detection is mapped to a square using the
+**bottom-center** of its box (where the piece meets the board), passed through the
+calibration transform.
 
-Single-piece dataset → for piece classification.
+**Board reconstruction.** For each frame the detected pieces are placed on their
+squares to produce a position (FEN). Board orientation is auto-detected by
+matching an early frame to the standard starting position.
 
-Gameplay dataset → for move detection between board states.
+**Replay UI.** A self-contained HTML page plays the real video and drives an
+animated board from the reconstructed positions, synced by time, with a move
+indicator and a material-score bar.
 
-Data includes:
+---
 
-Varying lighting conditions.
+## 3. Honest accuracy & limitations
 
-Multiple board states and game progressions.
+- **Detector:** ~**0.89 mAP50** (precision ≈ recall ≈ 0.89) on the validation
+  set. Most piece classes score 0.95-0.99; the weakest is black_rook (~0.82).
+- **What that means:** on a ~30-piece board it reads roughly 3-5 squares
+  wrong/missing per frame. So the animated board **tracks the game well on clear
+  and mid-game positions but is not a frame-perfect match**, especially in
+  crowded, heavily-occluded openings.
+- **Root causes:** the camera is at an angle (not perfectly top-down) and pieces
+  occlude each other; validation numbers are also somewhat optimistic because the
+  fixed camera makes frames similar.
+- The current reconstruction mode reads each frame independently (no
+  chess-legality smoothing), so occasional flicker/impossible reads can appear.
 
-2️⃣ Data Organization
+**Ideas to improve:** legality-constrained tracking with re-anchoring (smooths
+flicker, fixes impossible reads), more fully-annotated frames, or a truly
+top-down recapture.
 
-Project structured into clean modules:
+---
 
-chess_vision_project/
-├── data/
-│   ├── single_pieces/           # images of individual chess pieces
-│   ├── gameplay/                # game sequences (multiple frames)
-│   ├── labels/                  # labeling CSVs
-│   └── raw/                     # backup/raw data
-├── preprocessing/               # scripts for resizing, normalization, etc.
-├── models/                      # CNNs for piece and move detection
-├── utils/                       # helper functions (OpenCV, mapping)
-├── notebooks/                   # Jupyter notebooks for experiments
-├── results/                     # model outputs, metrics, visuals
-├── environment.yml              # conda environment setup
-└── README.md                    # project documentation
+## 4. Setup
 
-🧩 Methodology
-Stage	Description	Tools
-Piece Detection	Classify each cell of the chessboard into piece type (or empty)	TensorFlow / Keras CNN
-Board Segmentation	Detect 8×8 grid using OpenCV corner detection	OpenCV
-Move Detection	Compare consecutive board states to find moved piece	Numpy + Board State Diff
-Animated Visualization	Display detected moves on a digital chessboard	Python / Pygame (future scope)
-⚙️ Tech Stack
-Category	Tools
-Languages	Python
-Libraries	OpenCV, TensorFlow, NumPy, Pandas, Matplotlib
-Environment	Conda (Python 3.10)
-Data Handling	CSV, JSON
-IDE	VS Code / Jupyter Notebook
-Version Control	Git + GitHub
-🧰 Installation & Setup
-1️⃣ Clone the Repository
-git clone https://github.com/diya173/Chess-Real-to-animated.git
-cd Chess-Real-to-animated
+Requires Python 3.11 (tested). From the project root:
 
-2️⃣ Create the Conda Environment
-conda env create -f environment.yml
-conda activate chess_vision
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-3️⃣ (Optional) Install Manually
-pip install opencv-python tensorflow numpy pandas matplotlib scikit-learn
+This installs OpenCV, PyTorch + Ultralytics (YOLOv8), python-chess, pillow-heif
+(for HEIC), etc. On Apple Silicon, training/inference uses the GPU via MPS
+automatically.
 
-🧾 Dataset Labeling
-Single Piece Labeling
+---
 
-Run:
+## 5. How to run
 
-python data/labels/label_single_pieces.py
+Activate the environment first: `source .venv/bin/activate`
 
+### Full pipeline (game1)
 
-You’ll be shown each image and asked to type the correct piece name.
+```bash
+# 1. Calibrate the 4 board corners (interactive; click TL, TR, BR, BL, press y)
+python preprocessing/calibrate_board.py game1
 
-Gameplay Move Labeling
+# 2. Dedupe + build the clean, stabilized video
+python preprocessing/dedupe_frames.py game1 --threshold 22
 
-Run:
+# 3. Detect pieces on every frame and reconstruct positions
+python inference/reconstruct_game_yolo.py game1 detected
 
-python data/labels/label_game_moves.py
+# 4. Build and open the side-by-side interface
+python web/build_replay.py game1
+```
 
+Calibration is saved to `data/calibration/game1_corners.json`, so step 1 only
+needs to be done once per game.
 
-You’ll input the from and to squares (e.g., e2 e4) for each board image.
+### Just view the current result
 
-🚀 Future Goals
+```bash
+source .venv/bin/activate
+python inference/reconstruct_game_yolo.py game1 detected
+python web/build_replay.py game1        # opens web/replay_game1.html
+```
 
- Automate board detection from any angle.
+### Debug a single frame
 
- Integrate YOLO-based piece localization.
+```bash
+python inference/show_detection.py data/gameplay/game1/IMG_1373.HEIC 0.12
+python inference/detect_pieces.py  data/gameplay/game1/IMG_1373.HEIC 180
+```
 
- Create real-time move-to-animation pipeline.
+---
 
- Build a React or Godot-based front-end for visual replay.
+## 6. Training the detector
 
- Add sound, timestamps, and player tracking.# Chess Vision Project
+Dataset (YOLOv8 format, exported from Roboflow) lives in `data/roboflow_v2/`
+with 13 classes (12 pieces + `empty_board`, which is ignored downstream).
 
-This project detects chess moves and recognizes board states using computer vision.
+```bash
+python detection/train_detector.py \
+    --data data/roboflow_v2/data.yaml \
+    --model yolov8s.pt --epochs 150 --name chess_detector_v2
+
+# then promote the best weights for inference
+cp runs/detect/chess_detector_v2/weights/best.pt models/trained_models/best.pt
+```
+
+**Annotation guidelines** (if you re-annotate in Roboflow):
+- On full-board photos, draw a tight box around **every** piece (all ~32),
+  labeled with the correct color+type.
+- Single-piece photos get **one** box.
+- Do **not** label empty squares or the board itself.
+- Prefer variety (openings, mid-game, endgames) over near-duplicate frames.
+
+---
+
+## 7. Project structure
+
+```
+preprocessing/
+  calibrate_board.py     # click 4 corners -> calibration
+  dedupe_frames.py       # ORB align + drop duplicates + clean video
+  make_video.py          # photos -> video
+  extract_cells.py       # warp/crop helpers (shared library)
+  heic_to_jpg_games.py   # HEIC -> JPG for annotation
+detection/
+  train_detector.py      # YOLOv8 training
+models/
+  move_detector.py       # square-mapping + diff helpers (shared library)
+  trained_models/best.pt # trained detector weights (not committed)
+inference/
+  reconstruct_game_yolo.py  # main: detect -> reconstruct positions
+  detect_pieces.py          # single-frame board (ASCII)
+  show_detection.py         # single-frame detection viz
+web/
+  build_replay.py        # generate the side-by-side HTML
+  replay_game1.html       # generated interface
+data/
+  gameplay/game1, game2  # raw frames (HEIC)
+  single_pieces/         # single-piece photos
+  roboflow_v2/           # annotated YOLOv8 dataset
+  calibration/           # per-game corner calibration
+  labels/                # keyframes + reconstructed states
+  videos/                # generated videos (not committed)
+```
+
+---
+
+## 8. Data notes
+
+- **Gameplay frames:** game1 = ~106, game2 = ~196 (fixed top-down phone camera).
+- **Single-piece photos:** 174.
+- **Annotated dataset:** 314 images / ~2,872 boxes across train/valid/test.
+- Generated artifacts (videos, cell crops, training runs, model weights, the
+  dataset zip, the virtualenv) are git-ignored and regenerable.
+
+---
+
+## 9. Tech stack
+
+Python 3.11 · OpenCV · PyTorch + Ultralytics YOLOv8 · python-chess · Pillow /
+pillow-heif · NumPy. Web UI is plain HTML/CSS/JS (no server needed).
